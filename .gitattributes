@@ -1,3 +1,5 @@
 # Shell scripts run in WSL/Linux containers, so they must always use LF line endings
 # (core.autocrlf=true on Windows would otherwise check them out with CRLF and break bash).
 *.sh text eol=lf
+# Same for the Dockerfile: a CRLF would break its RUN line continuations.
+Dockerfile text eol=lf
