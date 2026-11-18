@@ -56,7 +56,8 @@ mapfile -t all_dbs < <("$DOCKER" exec "$container_name" "${sqlcmd[@]}" -d master
 existing_branches=()
 if git -C "$script_dir" rev-parse --git-dir >/dev/null 2>&1; then
     while IFS= read -r branch; do
-        existing_branches+=("$(sanitize_branch_name "$branch")")
+        sanitized="$(sanitize_branch_name "$branch")"
+        existing_branches+=("${sanitized,,}")   # lower-cased: database names are compared case-insensitively
     done < <(git -C "$script_dir" for-each-ref --format='%(refname:short)' refs/heads)
 fi
 
@@ -69,12 +70,15 @@ for db in "${all_dbs[@]}"; do
             ;;
         branch)
             want="${DB_BASE_NAME}_$(sanitize_branch_name "$branch_arg")"
-            [[ "$db" == "$want" || "$db" == "${want}_flyway" ]] && targets+=("$db")
+            db_lc="${db,,}"; want_lc="${want,,}"
+            [[ "$db_lc" == "$want_lc" || "$db_lc" == "${want_lc}_flyway" || "$db_lc" == "${want_lc}_shadow" ]] && targets+=("$db")
             ;;
         merged)
             [[ "$db" == "$DB_BASE_NAME" ]] && continue              # un-suffixed legacy DB: only --all drops it
             suffix="${db#"${DB_BASE_NAME}_"}"
-            suffix="${suffix%_flyway}"                              # the Flyway-side twin follows its branch
+            suffix="${suffix,,}"
+            suffix="${suffix%_flyway}"                              # the Flyway development and shadow databases
+            suffix="${suffix%_shadow}"                              # follow their branch
             keep=false
             for b in "${existing_branches[@]}"; do
                 [[ "$b" == "$suffix" ]] && keep=true && break

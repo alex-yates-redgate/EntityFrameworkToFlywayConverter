@@ -19,6 +19,13 @@ if [[ ! "$database_name" =~ ^[A-Za-z0-9_]+$ ]]; then
     exit 1
 fi
 
+# Leave room for the _flyway / _shadow suffixes Flyway adds to the same name.
+if (( ${#database_name} + 7 > DB_NAME_MAX_LENGTH )); then
+    echo "Database name '$database_name' is too long (SQL Server's limit is $DB_NAME_MAX_LENGTH characters, and Flyway adds a suffix)." >&2
+    echo "Use a shorter branch name, or set MSSQL_DATABASE_NAME." >&2
+    exit 1
+fi
+
 repo_dir="$(cd -- "$script_dir/.." && pwd)"
 project_dir="$repo_dir/EntityFramework"
 container_name="${MSSQL_CONTAINER_NAME:-$DEFAULT_CONTAINER_NAME}"
