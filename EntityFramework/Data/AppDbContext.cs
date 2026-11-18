@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable("Products");
             entity.HasKey(product => product.Id);
             entity.Property(product => product.Name).HasMaxLength(100).IsRequired();
+            entity.Property(p => p.Price).HasPrecision(18, 2);
         });
     }
 }
