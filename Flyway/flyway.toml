@@ -86,7 +86,6 @@ ignoreSquareBracketsInObjectNames = false
 ignoreStatistics = true
 ignoreStatisticsIncremental = false
 ignoreStatisticsNoRecomputePropertyOnIndexes = false
-ignoreSynonymDependencies = false
 ignoreSystemNamedConstraintAndIndexNames = false
 ignoreTsqltFrameworkAndTests = true
 ignoreUserProperties = true
@@ -118,11 +117,8 @@ reseedIdentityColumns = false
 skipIntegrityChecksForForeignKeys = false
 transportClrDataTypesAsBinary = false
 
-# Database names include the current git branch via the git resolver, so switching branch
-# switches database. ':ad' keeps only ASCII letters and digits, so branch names such as
-# 'feature/Add-Price' become 'featureAddPrice' and are safe to use in a database name.
 [environments.development]
-url = "jdbc:sqlserver://127.0.0.1:1433;databaseName=EntityFrameworkDemo_${git.branch:ad}_flyway;encrypt=optional;trustServerCertificate=true"
+url = "jdbc:sqlserver://127.0.0.1:1433;databaseName=EntityFrameworkDemo_${git.branch:ad};encrypt=optional;trustServerCertificate=true"
 displayName = "Development database"
 
 [environments.shadow]
