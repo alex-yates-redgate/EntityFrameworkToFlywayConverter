@@ -9,17 +9,20 @@ DOCKER="${DOCKER:-docker}"
 export PATH="$PATH:$HOME/.dotnet/tools"
 
 DEFAULT_CONTAINER_NAME="entityframework-flyway-sample"
-# Databases are named <base>_<branch>, so each git branch gets its own disposable database.
+# Database naming rule, shared with Flyway (see Flyway/flyway.toml):
+#   EF database:        <base>_<branch>
+#   Flyway development: <base>_<branch>_flyway
+#   Flyway shadow:      <base>_<branch>_shadow
+# where <branch> is the git branch name with everything except ASCII letters and digits removed.
+# That is exactly what Flyway's ${git.branch:ad} resolver filter does, so Flyway and these scripts
+# always agree on the name for a branch. Case is preserved, as Flyway does; SQL Server database
+# names are normally case-insensitive, so comparisons below ignore case.
 DB_BASE_NAME="${MSSQL_DATABASE_BASE:-EntityFrameworkDemo}"
+DB_NAME_MAX_LENGTH=128
 
-# Turns a git branch name into something safe to use in a SQL Server database name:
-# lower-case (SQL Server is usually case-insensitive), non-alphanumerics become '_', and
-# the result is trimmed to 80 characters. Used by both the deploy and cleanup scripts so
-# they always agree.
+# Turns a git branch name into the <branch> part of a database name, e.g. feature/Add-Price -> featureAddPrice.
 sanitize_branch_name() {
-    local name
-    name="$(tr '[:upper:]' '[:lower:]' <<<"$1" | sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//')"
-    echo "${name:0:80}"
+    LC_ALL=C sed -E 's/[^A-Za-z0-9]+//g' <<<"$1"
 }
 
 # Prints the database name to use. An explicit MSSQL_DATABASE_NAME always wins; otherwise it's

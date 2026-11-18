@@ -53,7 +53,15 @@ The script starts or reuses a SQL Server 2022 container named `entityframework-f
 
 ### One database per git branch
 
-Each git branch gets its own disposable database in the same container, named `EntityFrameworkDemo_<branch>`. For example, `feature/Add-Price` deploys to `EntityFrameworkDemo_feature_add_price`. This stops migrations from different branches getting mixed up in one database. It's safe because every database can be rebuilt from the migrations at any time.
+Each git branch gets its own disposable databases in the same container. One naming rule covers the EF scripts and Flyway:
+
+| Database | Name | Example for `feature/Add-Price` |
+|---|---|---|
+| EF deployment | `EntityFrameworkDemo_<branch>` | `EntityFrameworkDemo_featureAddPrice` |
+| Flyway development | `EntityFrameworkDemo_<branch>_flyway` | `EntityFrameworkDemo_featureAddPrice_flyway` |
+| Flyway shadow | `EntityFrameworkDemo_<branch>_shadow` | `EntityFrameworkDemo_featureAddPrice_shadow` |
+
+`<branch>` is the branch name with everything except ASCII letters and digits removed. That is exactly what Flyway's git resolver does with `${git.branch:ad}` in `Flyway/flyway.toml`, so Flyway and the scripts always agree on the name for a branch. (Two branches that differ only in punctuation, such as `feature/x-y` and `feature/xy`, would share databases.) This stops migrations from different branches getting mixed up in one database. It's safe because every database can be rebuilt from the migrations at any time.
 
 Environment variables you can set:
 
