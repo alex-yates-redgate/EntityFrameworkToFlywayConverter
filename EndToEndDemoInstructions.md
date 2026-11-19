@@ -40,28 +40,36 @@ Both are safe to re-run. On native Linux or in CI the demo scripts also work, wi
 
 ### Windows environment variables
 
-Set these three **on the Windows machine**, as user environment variables:
+Set these four **on the Windows machine**, as user environment variables:
 
 | Variable | Value |
 |---|---|
 | `MSSQL_SA_PASSWORD` | Any strong password for the local SQL Server container: at least 8 characters with upper case, lower case, a digit and a symbol. It is used when the container is first created. |
 | `REDGATE_EMAIL` | Your Redgate account email, used to activate Flyway Enterprise. |
 | `REDGATE_TOKEN` | A Redgate personal access token for that account. |
+| `WSLENV` | `MSSQL_SA_PASSWORD/u`. The standard Windows setting that lists which Windows variables are passed into WSL. It makes the SA password visible to plain `dotnet ef` commands in any WSL terminal. If `WSLENV` already has a value, append `:MSSQL_SA_PASSWORD/u` to it. |
 
-Set them in PowerShell (this persists), then **open a new WSL terminal** so it picks them up:
+The first three are the secrets. `WSLENV` is not a secret: it is only needed because `dotnet ef` (step 2) is not one of our scripts. Our `Scripts/*.sh` scripts read the three secrets from the Windows environment themselves.
+
+Set them all in PowerShell (this persists):
 ```powershell
 [Environment]::SetEnvironmentVariable('MSSQL_SA_PASSWORD','Use-A-Strong-Local-Password1!','User')
 [Environment]::SetEnvironmentVariable('REDGATE_EMAIL','you@your-company.com','User')
 [Environment]::SetEnvironmentVariable('REDGATE_TOKEN','<your personal access token>','User')
 
-# Make the SA password visible inside WSL, for plain `dotnet ef` commands (appends to any existing WSLENV)
+# WSLENV: appends to any existing value rather than overwriting it
 $wslenv = [Environment]::GetEnvironmentVariable('WSLENV','User')
 if ($wslenv -notmatch 'MSSQL_SA_PASSWORD') {
     [Environment]::SetEnvironmentVariable('WSLENV', (($wslenv, 'MSSQL_SA_PASSWORD/u') | Where-Object { $_ }) -join ':', 'User')
 }
 ```
-`WSLENV` is the standard Windows setting that lists which Windows variables are passed into WSL. Only `MSSQL_SA_PASSWORD` needs it: the Redgate variables are only used by our scripts, which read them from Windows themselves. Close **all** terminal windows (including Windows Terminal and VS Code) and open a new WSL terminal, because already-running programs keep the old environment. Check it worked with `echo ${MSSQL_SA_PASSWORD:+set}` in WSL, which should print `set`.
-Alternatively use *Edit environment variables for your account* in the Windows Start menu. The `Scripts/*.sh` scripts read any of the three from the Windows user or machine environment themselves if it isn't set in the WSL shell. `WSLENV` (below) additionally lets other tools you run in WSL, such as `dotnet ef`, see the password.
+(Alternatively use *Edit environment variables for your account* in the Windows Start menu.)
+
+Then close **all** terminal windows (including Windows Terminal and VS Code) and open a new WSL terminal, because already-running programs keep the old environment. Check it worked, in WSL:
+```bash
+echo ${MSSQL_SA_PASSWORD:+set}   # should print: set
+```
+
 > **PoC only: don't ship this.** Plain environment variables are fine for a throwaway demo but not for real use: other processes can read them, and anyone who can run `docker inspect` on a running container can see them. **Before this is used in anger, change the code to fetch these secrets from a proper secrets manager** (Azure Key Vault, etc.). Only `require_sql_password` and `require_flyway_auth` in `Scripts/lib/common.sh` need to change. The scripts print a warning about this on every run, which is expected. See [Credentials](README.md#credentials).
 
 ## Steps
@@ -69,7 +77,8 @@ Alternatively use *Edit environment variables for your account* in the Windows S
 ### 0. Set up a scratch branch
 In a WSL terminal, from the repo root:
 ```bash
-git checkout -b scratch-test   # databases are named per branch
+git checkout main && git pull
+git checkout -B scratch-test   # databases are named per branch; -B also resets an old scratch-test left from a previous run
 ```
 
 ### 1. Make an example change
