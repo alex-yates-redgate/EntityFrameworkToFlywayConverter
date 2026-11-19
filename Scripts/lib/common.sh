@@ -16,6 +16,8 @@
 #     Desktop, Rancher Desktop, Podman with a docker alias...). Set DOCKER to use another CLI name.
 #   - Secrets (SQL password, Redgate token) are never put on a command line: they are passed to
 #     containers by variable NAME (`-e NAME`) or through a temporary file that is deleted on exit.
+#   - PoC only: those secrets come from environment variables. Before real use, replace
+#     require_sql_password and require_flyway_auth with a secrets manager lookup (they warn about this).
 #   - Scripts are non-interactive: configuration comes from environment variables, results from exit codes,
 #     so they behave the same when run by a developer, a git hook or a CI pipeline.
 
@@ -193,7 +195,28 @@ import_windows_env() {
     done
 }
 
+# PROOF-OF-CONCEPT WARNING. Secrets (MSSQL_SA_PASSWORD, REDGATE_TOKEN) are read from environment variables
+# here, which is fine for a PoC but not for real use: environment variables are readable by other processes
+# and by anyone who can `docker inspect` a running container. Before this is used in anger, replace the
+# bodies of require_sql_password and require_flyway_auth with a lookup in a proper secrets manager.
+# Printed to stderr (so `CheckSync.sh --output json` keeps a clean stdout), once per script run.
+# Set SUPPRESS_SECRETS_WARNING=true to silence it (e.g. in a CI job that has already made that decision).
+_warn_secrets_from_environment() {
+    [[ "${SUPPRESS_SECRETS_WARNING:-}" == "true" || -n "${_secrets_warning_shown:-}" ]] && return 0
+    _secrets_warning_shown=1
+    {
+        echo "WARNING: PoC mode: secrets (MSSQL_SA_PASSWORD, REDGATE_TOKEN) are read from environment variables."
+        echo "         Before using this beyond a PoC, change require_sql_password and require_flyway_auth"
+        echo "         in Scripts/lib/common.sh to use a proper secrets manager. See README.md, 'Credentials'."
+        echo "         (Silence with SUPPRESS_SECRETS_WARNING=true.)"
+    } >&2
+}
+
 # Fails unless the SQL Server SA password is set. It is exported so containers can receive it by name.
+#
+# CURRENT APPROACH (PoC): the MSSQL_SA_PASSWORD environment variable.
+# FUTURE: replace the body of this function to fetch it from a secrets manager. Nothing else needs to
+# change, as long as MSSQL_SA_PASSWORD ends up exported.
 require_sql_password() {
     import_windows_env MSSQL_SA_PASSWORD
     if [[ -z "${MSSQL_SA_PASSWORD:-}" ]]; then
@@ -202,12 +225,13 @@ require_sql_password() {
             "  export MSSQL_SA_PASSWORD='Use-A-Strong-Local-Password1!'"
     fi
     export MSSQL_SA_PASSWORD
+    _warn_secrets_from_environment
 }
 
 # Fails unless Redgate credentials are available (the Flyway features we use need the Enterprise edition,
 # which the container activates from a Redgate email + personal access token).
 #
-# CURRENT APPROACH: environment variables REDGATE_EMAIL and REDGATE_TOKEN (a personal access token).
+# CURRENT APPROACH (PoC): environment variables REDGATE_EMAIL and REDGATE_TOKEN (a personal access token).
 # FUTURE: replace the body of this function to fetch them from a secrets manager (Azure Key Vault, etc.).
 # Nothing else needs to change, as long as FLYWAY_EMAIL and FLYWAY_TOKEN end up exported.
 require_flyway_auth() {
@@ -220,9 +244,10 @@ require_flyway_auth() {
             "Set REDGATE_EMAIL (your Redgate account email) and REDGATE_TOKEN (a Redgate personal access token)." \
             "Set them as Windows environment variables (WSL scripts read them automatically)," \
             "or export them in your shell (e.g. ~/.bashrc), which is what Linux and CI use." \
-            "See README.md, section 'Flyway credentials'."
+            "See README.md, section 'Credentials'."
     fi
     export FLYWAY_EMAIL FLYWAY_TOKEN
+    _warn_secrets_from_environment
 }
 
 # ------------------------------------------------------------------------------------------------
