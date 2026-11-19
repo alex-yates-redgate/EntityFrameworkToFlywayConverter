@@ -35,7 +35,7 @@ For readers who know Flyway but not EF:
 
 1. **A Docker-compatible container engine** reachable as `docker` in your shell. Docker Engine, Docker Desktop, Rancher Desktop or Podman (with a `docker` alias) all work: the scripts don't depend on any one of them. Set `DOCKER=<cli>` to use a differently named CLI.
 2. **The .NET 8 SDK and the `dotnet-ef` tool**, for the EF commands.
-3. **Redgate credentials**, because the Flyway features used here (`diff`, `model`, `generate`) need Flyway Enterprise. See [Flyway credentials](#flyway-credentials).
+3. **Redgate credentials**, because the Flyway features used here (`diff`, `model`, `generate`) need Flyway Enterprise. See [Credentials](#credentials).
 
 Every script checks these first and, if something is missing, stops with a message saying what to do. If you don't have Docker or .NET in WSL (Ubuntu or Debian), these scripts install them:
 
@@ -49,28 +49,27 @@ The Docker script is a generic starting point. If your organisation has its own 
 
 If you check this repo out on Windows with `core.autocrlf=true`, `.gitattributes` keeps LF line endings on the `.sh` files and the Dockerfile so they still run in Linux.
 
-### Flyway credentials
+### Credentials
 
-The Flyway container activates Flyway Enterprise from a Redgate account email and a **personal access token**. The scripts read them from two environment variables:
+> **PoC only.** For this proof of concept, all three secrets are plain environment variables. **Before this is used in anger, change the code to fetch them from a proper secrets manager** (Azure Key Vault, etc.). Only `require_sql_password` and `require_flyway_auth` in `Scripts/lib/common.sh` need to change. The scripts print a warning on every run as a reminder (to stderr; silence it with `SUPPRESS_SECRETS_WARNING=true`).
 
-```bash
-export REDGATE_EMAIL='you@your-company.com'
-export REDGATE_TOKEN='<your Redgate personal access token>'
-```
-
-**Set them once, as Windows environment variables, or export them in your shell.** Under WSL the scripts look in the Windows user and machine environment automatically when a variable isn't already set (via `powershell.exe`), so you don't need `WSLENV` or a second copy in `~/.bashrc`. On plain Linux, or in CI, set them as ordinary environment variables. The same applies to `MSSQL_SA_PASSWORD`.
-
-The scripts pass the token to the container by variable *name*, so it never appears on a command line. Note that anyone who can run `docker inspect` on a running container can read its environment, which is acceptable on a developer's own machine for short-lived containers. **Recommended next step:** fetch the credentials from a secrets manager. Only the function `require_flyway_auth` in `Scripts/lib/common.sh` needs to change.
-
-You also need the SQL Server password for the local container (any strong password; it is used when the container is first created):
+Three variables are needed:
 
 ```bash
-export MSSQL_SA_PASSWORD='Use-A-Strong-Local-Password1!'
+export REDGATE_EMAIL='you@your-company.com'                 # Redgate account email (Flyway Enterprise)
+export REDGATE_TOKEN='<your Redgate personal access token>'  # activates Flyway Enterprise in the container
+export MSSQL_SA_PASSWORD='Use-A-Strong-Local-Password1!'     # SA password for the local SQL Server container
 ```
+
+`MSSQL_SA_PASSWORD` can be any strong password. It is used when the SQL Server container is first created.
+
+**Set them once, as Windows environment variables, or export them in your shell.** Under WSL the scripts look in the Windows user and machine environment automatically when a variable isn't already set (via `powershell.exe`), so you don't need a second copy in `~/.bashrc`. To let plain `dotnet ef` commands (which are not our scripts) see the SA password too, also add `MSSQL_SA_PASSWORD/u` to the Windows `WSLENV` variable. [EndToEndDemoInstructions.md](EndToEndDemoInstructions.md) has the exact PowerShell. On plain Linux, or in CI, set them as ordinary environment variables.
+
+The scripts pass secrets to containers by variable *name*, so they never appear on a command line. Anyone who can run `docker inspect` on a running container can still read its environment, which is acceptable on a developer's own machine for short-lived containers, but is one more reason to move to a secrets manager.
 
 ## Developer workflow
 
-Run these from the repo root, in WSL.
+Run these from the repo root, in WSL. To try the whole flow on a scratch branch with an example change, follow [EndToEndDemoInstructions.md](EndToEndDemoInstructions.md).
 
 | Step | Do this | What happens |
 |---|---|---|
@@ -144,7 +143,8 @@ Every setting is an environment variable with a default. Override them, don't ed
 | Variable | Default | Purpose |
 |---|---|---|
 | `MSSQL_SA_PASSWORD` | (required) | SA password for the SQL Server container |
-| `REDGATE_EMAIL`, `REDGATE_TOKEN` | (required for Flyway) | Redgate account email and personal access token |
+| `REDGATE_EMAIL`, `REDGATE_TOKEN` | (required for Flyway) | Redgate account email and personal access token (PoC: environment variables, to be replaced by a secrets manager) |
+| `SUPPRESS_SECRETS_WARNING` | (unset) | Set to `true` to silence the PoC warning about secrets coming from environment variables |
 | `MSSQL_DATABASE_NAME` | derived from the branch | Exact dev database name (EF deploy script only; the Flyway scripts always use the branch name) |
 | `MSSQL_DATABASE_BASE` | `EntityFrameworkDemo` | Prefix for the branch-named databases. Must match the database names in `Flyway/flyway.toml`. |
 | `MSSQL_CONTAINER_NAME` | `entityframework-flyway-sample` | The SQL Server container to start or reuse |
@@ -163,7 +163,7 @@ The container shares the SQL Server container's network, so the `127.0.0.1:1433`
 
 The sample EF model and database name are placeholders. To use your own:
 
-1. Replace the contents of `EntityFramework/` with your EF project (keep a design-time factory that reads `MSSQL_SA_PASSWORD`, `MSSQL_PORT` and `MSSQL_DATABASE_NAME`, as `Data/AppDbContextFactory.cs` does), and delete the sample `Flyway/migrations` and `Flyway/schema-model` so they are regenerated from your model.
+1. Replace the contents of `EntityFramework/` with your EF project (keep a design-time factory that reads `MSSQL_SA_PASSWORD`, `MSSQL_PORT` and `MSSQL_DATABASE_NAME`, as `Data/AppDbContextFactory.cs` does), and delete the sample `Flyway/migrations` and `Flyway/schema-model` so they are regenerated from your model. Update or delete `EndToEndDemoInstructions.md`, which refers to the sample model.
 2. Choose your database base name: set the default of `MSSQL_DATABASE_BASE` in `Scripts/lib/common.sh` **and** the two `databaseName=` values in `Flyway/flyway.toml` (they must agree, see [One database per git branch](#one-database-per-git-branch)). Optionally rename the container (`MSSQL_CONTAINER_NAME`).
 3. Run the [developer workflow](#developer-workflow) once, then `./Scripts/CheckSync.sh`.
 
@@ -171,7 +171,7 @@ The sample EF model and database name are placeholders. To use your own:
 
 - **`localhost,1433` fails from a Windows tool such as SSMS, but `127.0.0.1,1433` works.** A quirk of how some Windows SQL clients resolve `localhost` through WSL's port forwarding. Use `127.0.0.1,1433`.
 - **A script says it can't find Docker.** Follow the message: it distinguishes "not installed", "not running", "no permission" and "Docker Desktop stub without WSL integration".
-- **Flyway reports Community Edition.** The Redgate credentials didn't reach the container. See [Flyway credentials](#flyway-credentials).
+- **Flyway reports Community Edition.** The Redgate credentials didn't reach the container. See [Credentials](#credentials).
 - **`git status` shows every file modified when run in WSL.** Files checked out by Windows git have CRLF line endings, which Linux git sees as changes. Use Windows git for `git status`, or clone the repo inside WSL.
 
 ## Progress
@@ -191,7 +191,6 @@ Done and verified in WSL (Ubuntu 22.04) with Flyway 13.12.2 Enterprise:
 2. **CI/CD checks and when to run them**: on pull request, on merge, on a schedule. They need a throwaway SQL Server container and the Redgate credentials from a secret store.
 3. **Ops deployment pipelines** (Azure DevOps): outside this repo's developer scripts. They would use `flyway migrate`, plus `check -changes`, `check -drift` and `check -dryrun` against real environments.
 4. **Code-review policy** for `check -code` (see above): refine the rule set, then enable `--fail-on-error`.
-5. **Secrets manager** for the Redgate credentials and SA password (only `require_flyway_auth` and `require_sql_password` in `Scripts/lib/common.sh` need to change).
-7. **Secrets manager** for the Redgate credentials and SQL password, replacing environment variables.
-8. **More realistic test migrations** (index, foreign key, data changes) and **baselining** existing databases (`baselineOnMigrate`).
-9. **Customer adaptation:** confirm their container engine and registry policy (Docker Desktop is untested here: only a native Docker Engine in WSL has been run), and re-check that Flyway Desktop doesn't write the removed `majorTolerance` setting back into `flyway.toml`.
+5. **Secrets manager (required before real use):** replace the environment variables for the Redgate credentials and SA password (see [Credentials](#credentials); only `require_flyway_auth` and `require_sql_password` in `Scripts/lib/common.sh` need to change), then remove the PoC warning.
+6. **More realistic test migrations** (index, foreign key, data changes) and **baselining** existing databases (`baselineOnMigrate`).
+7. **Customer adaptation:** confirm their container engine and registry policy (Docker Desktop is untested here: only a native Docker Engine in WSL has been run), and re-check that Flyway Desktop doesn't write the removed `majorTolerance` setting back into `flyway.toml`.
